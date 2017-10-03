@@ -16,6 +16,16 @@ typedef unsigned short		u16;
 typedef unsigned int		u32;
 typedef unsigned long long	u64;
 
+union vector2
+{
+	struct
+	{
+		f32 x, y;
+	};
+
+	f32 E[2];
+};
+
 bool global_isRunning = false;
 HGLRC global_openGLRenderContext;
 
@@ -85,6 +95,10 @@ LRESULT CALLBACK MainWinProc(HWND window, UINT message, WPARAM wParam, LPARAM lP
 
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdShow)
 {
+	vector2 v;
+	v.x = 0;
+	v.y = 1;
+
 	WNDCLASS windowClass = {};
 	windowClass.style = CS_HREDRAW | CS_VREDRAW;
 	windowClass.hInstance = hInst;
@@ -120,6 +134,29 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdSho
 
 				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 				glClearColor(0.0f, 0.25f, 0.5f, 1.0f);
+
+				glBegin(GL_TRIANGLES);
+				{
+					glVertex3f(-1, -1, 0);
+					glColor3f(1, 0, 0);
+
+					glVertex3f(-1, 1, 0);
+					glColor3f(0, 1, 0); 
+					
+					glVertex3f(1, -1, 0);
+					glColor3f(0, 0, 1);
+
+					glVertex3f(-1, 1, 0);
+					glColor3f(1, 0, 1);
+
+					glVertex3f(1, 1, 0);
+					glColor3f(0, 1, 1);
+					
+					glVertex3f(1, -1, 0);
+					glColor3f(1, 1, 1);
+
+				}
+				glEnd();
 
 				SwapBuffers(GetDC(window));
 			}
