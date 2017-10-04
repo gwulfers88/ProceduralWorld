@@ -16,7 +16,7 @@ typedef unsigned short		u16;
 typedef unsigned int		u32;
 typedef unsigned long long	u64;
 
-union vector2
+union vec2
 {
 	struct
 	{
@@ -26,8 +26,73 @@ union vector2
 	f32 E[2];
 };
 
+vec2 operator+(vec2 lhs, f32 rhs)
+{
+	vec2 result = {};
+	result.x = lhs.x + rhs;
+	result.y = lhs.y + rhs;
+
+	return result;
+}
+
+union vec3
+{
+	struct
+	{
+		f32 x, y, z;
+	};
+
+	struct
+	{
+		f32 r, g, b;
+	};
+
+	f32 E[3];
+};
+
+vec2 Vec2(f32 x, f32 y)
+{
+	vec2 result = {};
+	result.x = x;
+	result.y = y;
+
+	return result;
+}
+
+vec3 Vec3(f32 x, f32 y, f32 z)
+{
+	vec3 result = {};
+	result.x = x;
+	result.y = y;
+	result.z = z;
+
+	return result;
+}
+
+vec3 Vec3(vec2 xy, f32 z)
+{
+	vec3 result = {};
+	result.x = xy.x;
+	result.y = xy.y;
+	result.z = z;
+
+	return result;
+}
+
+vec3 Vec3(f32 x, vec2 yz)
+{
+	vec3 result = {};
+	result.x = x; 
+	result.y = yz.x;
+	result.z = yz.y;
+	
+	return result;
+}
+
 bool global_isRunning = false;
 HGLRC global_openGLRenderContext;
+i32 width = 800;
+i32 height = 600;
 
 LRESULT CALLBACK MainWinProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -93,12 +158,11 @@ LRESULT CALLBACK MainWinProc(HWND window, UINT message, WPARAM wParam, LPARAM lP
 	return result;
 }
 
+f32 dt = 0.016f;
+f32 angle = 0;
+
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdShow)
 {
-	vector2 v;
-	v.x = 0;
-	v.y = 1;
-
 	WNDCLASS windowClass = {};
 	windowClass.style = CS_HREDRAW | CS_VREDRAW;
 	windowClass.hInstance = hInst;
@@ -112,7 +176,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdSho
 		HWND window = CreateWindow(windowClass.lpszClassName, windowClass.lpszClassName,
 									WS_OVERLAPPEDWINDOW,
 									CW_USEDEFAULT, CW_USEDEFAULT,
-									800, 600,
+									width, height,
 									0, 0, hInst, 0);
 		if (window)
 		{
@@ -130,31 +194,44 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdSho
 					DispatchMessage(&msg);
 				}
 
-				glViewport(0, 0, 800, 600);
+				glViewport(0, 0, width, height);
 
 				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 				glClearColor(0.0f, 0.25f, 0.5f, 1.0f);
 
+				f32 aspect = (f32)(width / height);
+				f32 n = 0.1f;
+				f32 f = 1000.0f;
+
+				f32 proj[] = 
+				{
+					1,	0,			0,					0,
+					0,	1/aspect,	0,					0,
+					0,	0,			-((f + n)/(f - n)), -1,
+					0,	0,			-((2*(f*n))/(f-n)),	0,
+				};
+
+				angle += dt * 10.0f;
+
+				glLoadIdentity();
+				glMatrixMode(GL_PROJECTION);
+				glLoadMatrixf(&proj[0]);
+
+				glMatrixMode(GL_MODELVIEW);
+
+				glRotatef(angle, 0.0f, 1.0f, 0.0f);
+
 				glBegin(GL_TRIANGLES);
 				{
-					glVertex3f(-1, -1, 0);
-					glColor3f(1, 0, 0);
+					vec3 pos = Vec3(0, 0, -2.0f);
+					glVertex3f(pos.x, pos.y + 0.5f, pos.z);
+					glColor3f(pos.x, 0, 0);
 
-					glVertex3f(-1, 1, 0);
-					glColor3f(0, 1, 0); 
-					
-					glVertex3f(1, -1, 0);
-					glColor3f(0, 0, 1);
+					glVertex3f(pos.x + 0.5f, pos.y - 0.5f, pos.z);
+					glColor3f(0, pos.y, 0);
 
-					glVertex3f(-1, 1, 0);
-					glColor3f(1, 0, 1);
-
-					glVertex3f(1, 1, 0);
-					glColor3f(0, 1, 1);
-					
-					glVertex3f(1, -1, 0);
-					glColor3f(1, 1, 1);
-
+					glVertex3f(pos.x - 0.5f, pos.y - 0.5f, pos.z);
+					glColor3f(0, 0, pos.z*-1);
 				}
 				glEnd();
 
