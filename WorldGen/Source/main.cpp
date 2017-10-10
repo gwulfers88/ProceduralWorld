@@ -16,6 +16,51 @@ typedef unsigned short		u16;
 typedef unsigned int		u32;
 typedef unsigned long long	u64;
 
+#include <math.h>
+
+f32 Square(f32 val)
+{
+	f32 result = val * val;
+	return result;
+}
+
+f32 Lerp(f32 a, f32 t, f32 b)
+{
+	f32 result = (1.0f - t)*a + t*b;
+	return result;
+}
+
+f32 Clamp(f32 min, f32 val, f32 max)
+{
+	f32 result = val;
+	if (val < min)
+	{
+		result = min;
+	}
+	else if (val > max)
+	{
+		result = max;
+	}
+	return result;
+}
+
+f32 Clamp01(f32 val)
+{
+	f32 result = Clamp(0.0f, val, 1.0f);
+	return result;
+}
+
+f32 Clamp01MapToRange(f32 min, f32 t, f32 max)
+{
+	f32 result = 0.0f;
+	f32 range = max - min;
+	if (range != 0.0f)
+	{
+		result = Clamp01((t - min) / range);
+	}
+	return result;
+}
+
 union vec2
 {
 	struct
@@ -26,12 +71,91 @@ union vec2
 	f32 E[2];
 };
 
-vec2 operator+(vec2 lhs, f32 rhs)
+vec2 operator*(f32 a, vec2 b)
 {
 	vec2 result = {};
-	result.x = lhs.x + rhs;
-	result.y = lhs.y + rhs;
+	result.x = a * b.x;
+	result.y = a * b.y;
+	return result;
+}
 
+vec2 operator*(vec2 b, f32 a)
+{
+	vec2 result = a*b;
+	return result;
+}
+
+vec2& operator*=(vec2& b, f32 a)
+{
+	b = a * b;
+	return b;
+}
+
+vec2 operator-(vec2 a)
+{
+	vec2 result;
+	result.x = -a.x;
+	result.y = -a.y;
+	return result;
+}
+
+vec2 operator-(vec2 a, vec2 b)
+{
+	vec2 result;
+	result.x = a.x - b.y;
+	result.y = a.y - b.y;
+	return result;
+}
+
+vec2 operator+(vec2 a, vec2 b)
+{
+	vec2 result;
+	result.x = a.x + b.x;
+	result.y = a.y + b.y;
+	return result;
+}
+
+vec2& operator+=(vec2& a, vec2 b)
+{
+	a = a + b;
+	return a;
+}
+
+vec2 Hadamard(vec2 a, vec2 b)
+{
+	vec2 result = { a.x * b.x, a.y * b.y };
+	return result;
+}
+
+f32 Dot(vec2 a, vec2 b)
+{
+	f32 result = a.x*b.x + a.y*b.y;
+	return result;
+}
+
+f32 LengthSq(vec2 a)
+{
+	f32 result = Dot(a, a);
+	return result;
+}
+
+f32 Length(vec2 a)
+{
+	f32 result = sqrt(LengthSq(a));
+	return result;
+}
+
+vec2 Perp(vec2 a)
+{
+	vec2 result = {-a.y, a.x};
+	return result;
+}
+
+vec2 Clamp01(vec2 val)
+{
+	vec2 result;
+	result.x = Clamp01(val.x);
+	result.y = Clamp01(val.y);
 	return result;
 }
 
@@ -41,12 +165,20 @@ union vec3
 	{
 		f32 x, y, z;
 	};
-
 	struct
 	{
 		f32 r, g, b;
 	};
-
+	struct
+	{
+		vec2 xy;
+		f32 ignored0;
+	};
+	struct
+	{
+		f32 ignored1;
+		vec2 yz;
+	};
 	f32 E[3];
 };
 
@@ -199,16 +331,17 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdSho
 				glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 				glClearColor(0.0f, 0.25f, 0.5f, 1.0f);
 
+				f32 focalLen = 0.60f;
 				f32 aspect = (f32)(width / height);
 				f32 n = 0.1f;
 				f32 f = 1000.0f;
 
 				f32 proj[] = 
 				{
-					1,	0,			0,					0,
-					0,	1/aspect,	0,					0,
-					0,	0,			-((f + n)/(f - n)), -1,
-					0,	0,			-((2*(f*n))/(f-n)),	0,
+					1*focalLen,	0,			0,					0,
+					0,	aspect*focalLen,	0,					0,
+					0,	0,			((n + f)/(n - f)), -1,
+					0,	0,			((2*f*n)/(n-f)),	0,
 				};
 
 				angle += dt * 10.0f;
