@@ -112,6 +112,11 @@
   <ItemGroup>
     <ClCompile Include="Source\main.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Source\Common\types.h" />
+    <ClInclude Include="Source\Math\vec2.h" />
+    <ClInclude Include="Source\Math\vec3.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
