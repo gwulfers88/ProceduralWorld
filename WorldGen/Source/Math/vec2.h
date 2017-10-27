@@ -5,6 +5,35 @@
 #include <math.h>
 
 /// Scalar Operations
+
+inline f32
+SquareRoot(f32 A)
+{
+	f32 Result = (f32)sqrt(A);
+	return Result;
+}
+
+inline f32
+Pow(f32 A, f32 B)
+{
+	f32 Result = (f32)pow(A, B);
+	return Result;
+}
+
+inline i32
+RoundReal32ToInt32(f32 Real32)
+{
+	i32 Result = (i32)roundf(Real32);
+	return(Result);
+}
+
+inline u32
+RoundReal32ToUInt32(f32 Real32)
+{
+	u32 Result = (u32)roundf(Real32);
+	return(Result);
+}
+
 f32 Square(f32 val)
 {
 	f32 result = val * val;

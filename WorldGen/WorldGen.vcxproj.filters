@@ -35,5 +35,11 @@
     <ClInclude Include="Source\Math\vec3.h">
       <Filter>Source Files\Math</Filter>
     </ClInclude>
+    <ClInclude Include="Source\Math\perlinNoise.h">
+      <Filter>Source Files\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Math\stb_perlin.h">
+      <Filter>Source Files\Math</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
