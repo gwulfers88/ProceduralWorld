@@ -8,14 +8,18 @@
 #include <Windows.h>
 #include <gl/GL.h>
 
+#pragma comment(lib, "user32.lib")
+#pragma comment(lib, "gdi32.lib")
+#pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "opengl32.lib")
 
-bool global_isRunning = false;
-HGLRC global_openGLRenderContext;
-i8* global_windowText = "Procedural World Gen\0";
-i32 global_width = 1920*0.7f;
-i32 global_height = 1080*0.7f;
-WINDOWPLACEMENT global_previousPlacement;
+global_variable bool global_isRunning = false;
+global_variable HGLRC global_openGLRenderContext;
+global_variable i8* global_windowText = "Procedural World Gen\0";
+global_variable i32 global_width = (i32)(1920*0.9f);
+global_variable i32 global_height = (i32)(1080*0.9f);
+global_variable WINDOWPLACEMENT global_previousPlacement;
+global_variable LARGE_INTEGER GlobalPerfCounterFreq;
 
 struct win32_memory
 {
@@ -151,33 +155,265 @@ LRESULT CALLBACK MainWinProc(HWND window, UINT message, WPARAM wParam, LPARAM lP
 	return result;
 }
 
-f32 dt = 0.016f;
-f32 angle = 0;
-
-#define terrain_width 200
-#define terrain_height 200
-#define terrain_cell_count 150
-#define terrain_min_height 1.0f
-#define terrain_max_height 200.0f
-
-f32 terrainHeights[terrain_cell_count+1][terrain_cell_count+1];
-vec3 terrain_verts[terrain_cell_count + 1][terrain_cell_count + 1];
-
 f32 terrain_highest_peak = F32Min;
 
-vec3 CameraP = Vec3(0.0f, 40.0f, 0.0f);
+vec3 CameraX;
+vec3 CameraY;
+vec3 CameraZ;
+vec2 LastMouseP;
 
 f32 CameraPitch = 0;// 0.025f*Pi32;
 f32 CameraOrbit = 0;
-f32 CameraDolly = 0;
+f32 CameraZDolly = 0;
+f32 CameraYDolly = 0;
+f32 CameraXDolly = 0;
 
-i32 current_cell_count = 0;
+struct camera
+{
+	vec3 P;
+	f32 FocalLen;
+	f32 WidthOverHeight;
+};
 
-f32 timer = 0.0f;
-f32 delay = 0.5f;
+struct terrain_chunk
+{
+	vec3 ChunkPos;
+	vec2 ChunkDims;
+	u32 cellCount;
+	u32 VertCount;
+	vec3* Verts;
+};
+
+struct terrain
+{
+	f32 MinHeight;
+	u32 ChunksPerW;
+	u32 ChunksPerL;
+	terrain_chunk* Chunks;
+};
+
+struct memory_arena
+{
+	void* Base;
+	mem_size Used;
+	mem_size TotalSize;
+};
+
+memory_arena InitializeArena(void* Base, mem_size Size)
+{
+	memory_arena Arena = {};
+	Arena.Base = Base;
+	Arena.Used = 0;
+	Arena.TotalSize = Size;
+
+	return Arena;
+}
+
+struct game_button
+{
+	b32 EndedDown;
+	u32 HalfTransitionCount;
+};
+
+struct game_controller
+{
+	union
+	{
+		game_button Buttons[12];
+		struct
+		{
+			game_button MoveUp;
+			game_button MoveDown;
+			game_button MoveLeft;
+			game_button MoveRight;
+
+			game_button ActionUp;
+			game_button ActionDown;
+			game_button ActionLeft;
+			game_button ActionRight;
+
+			game_button Start;
+			game_button Back;
+
+			game_button LeftBumper;
+			game_button RightBumber;
+
+			// NOTE: All new buttons need to be added before this line
+			game_button ButtonCount;
+		};
+	};
+};
+
+#define MAX_CONTROLLER_COUNT 5
+enum platform_mouse_button
+{
+	PlatformMouseButton_Left,
+	PlatformMouseButton_Middle,
+	PlatformMouseButton_Right,
+
+	PlatformMouseButton_Count,
+};
+
+struct game_input
+{
+	game_controller GameControllers[MAX_CONTROLLER_COUNT];
+	game_button MouseButtons[PlatformMouseButton_Count];
+	f32 dtForFrame;
+	f32 MouseX;
+	f32 MouseY;
+
+	b32 AltDown;
+	b32 ShiftDown;
+	b32 ControlDown;
+};
+
+#define PushStruct(Arena, Size, Type) (Type*)PushMemory(Arena, sizeof(Type)*Size)
+#define PushArray(Arena, CountW, CountH, Type) (Type*)PushMemory(Arena, sizeof(Type)*(CountW*CountH))
+void* PushMemory(memory_arena* Arena, mem_size Size)
+{
+	void* Base = 0;
+	if (Arena->Used + Size < Arena->TotalSize)
+	{
+		Base = ((u8*)Arena->Base + Arena->Used + Size);
+		Arena->Used += Size;
+	}
+	return Base;
+}
+
+void Win32ProcessKeyboardMessage(game_button *NewState, b32 IsDown)
+{
+	if (NewState->EndedDown != IsDown)
+	{
+		NewState->EndedDown = IsDown;
+		++NewState->HalfTransitionCount;
+	}
+}
+
+inline game_controller *
+GetController(game_input *Input, u32 ControllerIndex)
+{
+	Assert((ControllerIndex < ArrayCount(Input->GameControllers)));
+
+	game_controller *Result = Input->GameControllers + ControllerIndex;
+	return Result;
+}
+
+inline b32
+WasPressed(game_button Button)
+{
+	b32 Result = (Button.HalfTransitionCount > 1 ||
+		Button.HalfTransitionCount == 1 && (Button.EndedDown));
+	return Result;
+}
+
+inline b32
+IsDown(game_button Button)
+{
+	b32 Result = (Button.EndedDown);
+	return Result;
+}
+
+win32_dimension Win32GetWindowDimensions(HWND window)
+{
+	win32_dimension Result = {};
+	RECT clientRect = {};
+	GetClientRect(window, &clientRect);
+	Result.width = clientRect.right - clientRect.left;
+	Result.height = clientRect.bottom - clientRect.top;
+
+	return Result;
+}
+
+LARGE_INTEGER Win32GetClock()
+{
+	LARGE_INTEGER perfCounter = {};
+	QueryPerformanceCounter(&perfCounter);
+	return perfCounter;
+}
+
+f64 Win32GetSecondsElapsed(LARGE_INTEGER Start, LARGE_INTEGER End)
+{
+	return (((f64)End.QuadPart - (f64)Start.QuadPart) / (f64)GlobalPerfCounterFreq.QuadPart);
+}
+
+void Win32ProcessPendingMessages(game_controller* KeyboardController)
+{
+	MSG msg = {};
+	while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE) > 0)
+	{
+		switch (msg.message)
+		{
+		case WM_SYSKEYUP:
+		case WM_SYSKEYDOWN:
+		case WM_KEYUP:
+		case WM_KEYDOWN:
+		{
+			u32 keyCode = (u32)msg.wParam;
+			b32 isDown = ((msg.lParam & (1 << 31)) == 0);
+			b32 wasDown = ((msg.lParam & (1 << 30)) != 0);
+			b32 AltKeyWasDown = (msg.lParam & (1 << 29));
+
+			if (isDown != wasDown)
+			{
+				if (keyCode == 'W')
+				{
+					Win32ProcessKeyboardMessage(&KeyboardController->MoveUp, isDown);
+				}
+				if (keyCode == 'S')
+				{
+					Win32ProcessKeyboardMessage(&KeyboardController->MoveDown, isDown);
+				}
+				if (keyCode == 'A')
+				{
+					Win32ProcessKeyboardMessage(&KeyboardController->MoveLeft, isDown);
+				}
+				if (keyCode == 'D')
+				{
+					Win32ProcessKeyboardMessage(&KeyboardController->MoveRight, isDown);
+				}
+				if (keyCode == VK_UP)
+				{
+					Win32ProcessKeyboardMessage(&KeyboardController->ActionUp, isDown);
+				}
+				if (keyCode == VK_DOWN)
+				{
+					Win32ProcessKeyboardMessage(&KeyboardController->ActionDown, isDown);
+				}
+				if (keyCode == VK_LEFT)
+				{
+					Win32ProcessKeyboardMessage(&KeyboardController->ActionLeft, isDown);
+				}
+				if (keyCode == VK_RIGHT)
+				{
+					Win32ProcessKeyboardMessage(&KeyboardController->ActionRight, isDown);
+				}
+
+				if (isDown)
+				{
+					if (AltKeyWasDown && keyCode == VK_RETURN)
+					{
+						if (msg.hwnd)
+						{
+							Win32ToggleFullscreen(msg.hwnd);
+						}
+					}
+				}
+			}
+		}break;
+
+		default:
+		{
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}break;
+		}
+	}
+}
 
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdShow)
 {
+	QueryPerformanceFrequency(&GlobalPerfCounterFreq);
+
 	WNDCLASS windowClass = {};
 	windowClass.style = CS_HREDRAW | CS_VREDRAW;
 	windowClass.hInstance = hInst;
@@ -200,6 +436,14 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdSho
 
 			global_isRunning = true;
 
+			HDC dc = GetDC(window);
+			i32 MonitorRefreshHz = GetDeviceCaps(dc, VREFRESH);
+			f32 TargetFrameTime = 1.0f / (f32)MonitorRefreshHz;
+			ReleaseDC(window, dc);
+
+			UINT DesiredSchedulerMS = 1;
+			b32 SleepIsGranular = (timeBeginPeriod(DesiredSchedulerMS) == TIMERR_NOERROR);
+
 			win32_memory memory = {};
 			memory.persistentStorageSize = Megabyte(64);
 			memory.transientStorageSize = Megabyte(64);
@@ -208,105 +452,187 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdSho
 			memory.persistentStorage = VirtualAlloc(0, memory.persistentStorageSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 			memory.transientStorage = VirtualAlloc(0, memory.transientStorageSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
-			u32 Octaves = 16;
-			f32 Persistance = 0.5f;
-			f32 Lacunarity = 2;
-			f32 NoiseScale = 50;
-
-			for (u32 y = 0; y < terrain_cell_count + 1; y++)
-			{
-				for (u32 x = 0; x < terrain_cell_count + 1; x++)
-				{
-					f32 Freq = 1;
-					f32 Amp = 1;
-
-					f32 XOff = (f32)(x) / NoiseScale;
-					f32 YOff = (f32)(y) / NoiseScale;
-
-					f32 Sample = stb_perlin_fbm_noise3(XOff, YOff, 1.0f, Lacunarity, Persistance, Octaves, 10, 10, 10);
-
-					XOff = (x) / NoiseScale * 0.5f;
-					YOff = (y) / NoiseScale * 0.5f;
-
-					Sample += stb_perlin_fbm_noise3(XOff, YOff, 1.0f, Lacunarity, Persistance/2, Octaves/2, 10/2, 10/2, 10/2);
-					//Sample *= 50.0f;
-					Sample = Maximum(Sample * 50, terrain_min_height);
-
-					if (Sample > terrain_highest_peak)
-						terrain_highest_peak = Sample;
-
-					terrainHeights[y][x] = Sample;
-				}
-			}
-
-			for (u32 y = 0; y < terrain_cell_count; y++)
-			{
-				for (u32 x = 0; x < terrain_cell_count + 1; x++)
-				{
-					f32 Sample1 = terrainHeights[y][x];
-					f32 Sample2 = terrainHeights[y + 1][x];
-					
-					vec3 p1 = Vec3((f32)x*(terrain_width / terrain_cell_count), Sample1, (f32)y*(terrain_height / terrain_cell_count));
-					vec3 p2 = Vec3((f32)x*(terrain_width / terrain_cell_count), Sample2, ((f32)y + 1) * (terrain_height / terrain_cell_count));
-
-					terrain_verts[y][x] = p1;
-					terrain_verts[y + 1][x] = p2;
-				}
-			}
-
 			if (memory.persistentStorage && memory.transientStorage)
 			{
-				while (global_isRunning)
+				LARGE_INTEGER startCounter = Win32GetClock();
+				DWORD startCycles = (DWORD)__rdtsc();
+
+				game_input Input[2] = {};
+				game_input *NewInput = &Input[0];
+				game_input *OldInput = &Input[1];
+
+				game_controller *OldKeyboardController = GetController(OldInput, 0);
+				game_controller *NewKeyboardController = GetController(NewInput, 0);
+				*NewKeyboardController = {};
+				for (u32 ButtonIndex = 0;
+					ButtonIndex < ArrayCount(NewKeyboardController->Buttons);
+					++ButtonIndex)
 				{
-					MSG msg = {};
-					while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE) > 0)
+					NewKeyboardController->Buttons[ButtonIndex].EndedDown =
+						OldKeyboardController->Buttons[ButtonIndex].EndedDown;
+				}
+
+				memory_arena WorldArena = InitializeArena(memory.persistentStorage, memory.persistentStorageSize);
+
+				terrain Terrain = {};
+				Terrain.ChunksPerW = 8;
+				Terrain.ChunksPerL = 8;
+				Terrain.Chunks = PushArray(&WorldArena, Terrain.ChunksPerW, Terrain.ChunksPerL, terrain_chunk);
+				Terrain.MinHeight = -20.0f;
+
+				u32 Octaves = 8;
+				f32 Persistance = 0.4f;
+				f32 Lacunarity = 2.5f;
+				f32 NoiseScale = 200;
+
+				for (u32 ChunkY = 0; ChunkY < Terrain.ChunksPerL; ChunkY++)
+				{
+					for (u32 ChunkX = 0; ChunkX < Terrain.ChunksPerW; ChunkX++)
 					{
-						switch (msg.message)
-						{
-						case WM_SYSKEYUP:
-						case WM_SYSKEYDOWN:
-						case WM_KEYUP:
-						case WM_KEYDOWN:
-						{
-							u32 keyCode = (u32)msg.wParam;
-							b32 isDown = ((msg.lParam & (1 << 31)) == 0);
-							b32 wasDown = ((msg.lParam & (1 << 30)) != 0);
-							b32 AltKeyWasDown = (msg.lParam & (1 << 29));
+						terrain_chunk* Chunk = &Terrain.Chunks[ChunkY * Terrain.ChunksPerW + ChunkX];
+						Chunk->ChunkDims = Vec2(50, 50);
+						Chunk->ChunkPos = Vec3((ChunkX * Chunk->ChunkDims.x), 0, (ChunkY * Chunk->ChunkDims.y));
+						Chunk->cellCount = (u32)Chunk->ChunkDims.x - 1;
+						Chunk->VertCount = Chunk->cellCount + 1;
+						Chunk->Verts = PushArray(&WorldArena, Chunk->VertCount, Chunk->VertCount, vec3);
 
-							if (isDown != wasDown)
+						for (u32 y = 0; y < Chunk->cellCount + 1; y++)
+						{
+							for (u32 x = 0; x < Chunk->cellCount + 1; x++)
 							{
-								if (keyCode == 'w')
-								{
-									MessageBox(msg.hwnd, "You have pressed the W key", "KeyDown", 0);
-								}
+								vec3 p1 = Vec3((f32)x*(Chunk->ChunkDims.x / Chunk->cellCount), 1.0f, (f32)y*(Chunk->ChunkDims.y / Chunk->cellCount)) + (Chunk->ChunkPos);
+								vec3 p2 = Vec3((f32)x*(Chunk->ChunkDims.x / Chunk->cellCount), 1.0f, ((f32)y + 1) * (Chunk->ChunkDims.y / Chunk->cellCount)) + (Chunk->ChunkPos);
 
-								if (isDown)
-								{
-									if (AltKeyWasDown && keyCode == VK_RETURN)
-									{
-										if (msg.hwnd)
-										{
-											Win32ToggleFullscreen(msg.hwnd);
-										}
-									}
-								}
+								f32 Sample = stb_perlin_fbm_noise3((p1.x) / NoiseScale,
+									(p1.y) / NoiseScale,
+									(p1.z) / NoiseScale, Lacunarity, Persistance, Octaves, MAXINT32, MAXINT32, MAXINT32);
+
+								f32 Sample2 = stb_perlin_fbm_noise3((p2.x) / NoiseScale,
+									(p2.y) / NoiseScale,
+									(p2.z) / NoiseScale, Lacunarity, Persistance, Octaves, MAXINT32, MAXINT32, MAXINT32);
+
+								Sample = Maximum(Sample * 50, Terrain.MinHeight);
+								Sample2 = Maximum(Sample2 * 50, Terrain.MinHeight);
+
+								if (Sample > terrain_highest_peak)
+									terrain_highest_peak = Sample;
+
+								if (Sample2 > terrain_highest_peak)
+									terrain_highest_peak = Sample2;
+
+								p1.y = Sample;
+								p2.y = Sample2;
+
+								Chunk->Verts[y * Chunk->VertCount + x] = p1;
+								Chunk->Verts[(y + 1) * Chunk->VertCount + x] = p1;
 							}
-						}break;
-
-						default:
-						{
-							TranslateMessage(&msg);
-							DispatchMessage(&msg);
-						}break;
 						}
 					}
+				}
 
-					win32_dimension windowDims = {};
+				mem_size PermStorageRemaining = WorldArena.TotalSize - WorldArena.Used;
 
-					RECT clientRect = {};
-					GetClientRect(window, &clientRect);
-					windowDims.width = clientRect.right - clientRect.left;
-					windowDims.height = clientRect.bottom - clientRect.top;
+				camera Camera = {};
+				Camera.P = Vec3(Terrain.ChunksPerW*(Terrain.Chunks[0].ChunkDims.x*0.5f), 20.0f, Terrain.ChunksPerL*(Terrain.Chunks[0].ChunkDims.y*0.5f));
+
+				while (global_isRunning)
+				{
+					Win32ProcessPendingMessages(NewKeyboardController);
+
+					POINT MouseP = {};
+					GetCursorPos(&MouseP);
+					ScreenToClient(window, &MouseP);
+					f32 MouseX = (f32)MouseP.x;
+					f32 MouseY = (f32)MouseP.y;
+
+					NewInput->MouseX = MouseX;
+					NewInput->MouseY = MouseY;
+
+					win32_dimension windowDims = Win32GetWindowDimensions(window);
+
+					NewInput->ShiftDown = (GetKeyState(VK_SHIFT) & (1 << 15));
+					NewInput->AltDown = (GetKeyState(VK_MENU) & (1 << 15));
+					NewInput->ControlDown = (GetKeyState(VK_CONTROL) & (1 << 15));
+
+					DWORD Win32Buttons[] =
+					{
+						VK_LBUTTON,
+						VK_MBUTTON,
+						VK_RBUTTON,
+					};
+					for (u32 ButtonIndex = 0;
+						ButtonIndex < 3;
+						ButtonIndex++)
+					{
+						NewInput->MouseButtons[ButtonIndex] = OldInput->MouseButtons[ButtonIndex];
+						NewInput->MouseButtons[ButtonIndex].HalfTransitionCount = 0;
+						Win32ProcessKeyboardMessage(&NewInput->MouseButtons[ButtonIndex], (GetKeyState(Win32Buttons[ButtonIndex]) & (1 << 15)));
+					}
+
+					NewInput->dtForFrame = TargetFrameTime;
+
+					// GameUpdateAndRender(&GameMemory, NewInput, &Commands);
+
+					game_controller* Controller = GetController(NewInput, 0);
+					if (Controller)
+					{
+						f32 offsetY = 0;
+						if (IsDown(Controller->MoveUp))
+						{
+							offsetY = 1;
+						}
+						else if (IsDown(Controller->MoveDown))
+						{
+							offsetY = -1;
+						}
+
+						f32 offsetX = 0;
+						if (IsDown(Controller->MoveLeft))
+						{
+							offsetX = -1;
+						}
+						else if (IsDown(Controller->MoveRight))
+						{
+							offsetX = 1;
+						}
+
+						f32 RotY = 0;
+						if (IsDown(Controller->ActionLeft))
+						{
+							RotY = 1;
+						}
+						else if (IsDown(Controller->ActionRight))
+						{
+							RotY = -1;
+						}
+
+						f32 CameraSpeed = 20.0f;
+						CameraOrbit += RotY * NewInput->dtForFrame;
+						CameraXDolly += offsetX * CameraSpeed * NewInput->dtForFrame;
+						CameraYDolly += offsetY * CameraSpeed * NewInput->dtForFrame;
+						
+						vec2 MouseP = {};
+						
+						MouseP.x = Input->MouseX;
+						MouseP.y = Input->MouseY;
+						vec2 dMouseP = MouseP - LastMouseP;
+
+						vec3 CameraOffset = Camera.P;
+
+						if (Input->MouseButtons[PlatformMouseButton_Left].EndedDown)
+						{
+							f32 RotationSpeed = 0.001f*Pi32;
+							//CameraOrbit += RotationSpeed*dMouseP.x;
+							CameraPitch += RotationSpeed*dMouseP.y;
+						}
+						else if (Input->MouseButtons[PlatformMouseButton_Middle].EndedDown)
+						{
+							f32 ZoomSpeed = (CameraOffset.z + CameraZDolly)*0.005f;
+							CameraZDolly -= ZoomSpeed*dMouseP.y;
+						}
+							
+						LastMouseP = MouseP;
+					}
 
 					glDepthMask(GL_TRUE);
 					glDepthFunc(GL_LEQUAL);
@@ -320,140 +646,150 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdSho
 
 					glClearDepth(1.0f);
 					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-					glClearColor(0.0f, 0.25f, 0.5f, 1.0f);
-
-					f32 focalLen = 0.60f;
-					f32 aspect = (f32)(windowDims.width / windowDims.height);
-					f32 n = 0.1f;
-					f32 f = 1000.0f;
-
-					f32 a = 1.0f;
-					f32 b = aspect;
-					f32 c = focalLen;
-
-					f32 d = (n + f) / (n - f);
-					f32 e = (2 * f*n) / (n - f);
-
-					f32 proj[] =
-					{
-						a*c,	  0,	0,	0,
-						  0,	b*c,	0,	0,
-						  0,	  0,	d, -1,
-						  0,	  0,	e,	0,
-					};
-
-					angle += dt * 5.0f;
+					glClearColor(0.2f, 0.5f, 0.9f, 1.0f);
 
 					glMatrixMode(GL_MODELVIEW);
 					glLoadIdentity();
 
 					glMatrixMode(GL_PROJECTION);
-					f32 WithOverHeight = (f32)windowDims.width/(f32)windowDims.height;
-					f32 FocalLength = 0.6f;
-					mat4x4 Proj = PerspectiveProjection(WithOverHeight, FocalLength);
+					Camera.WidthOverHeight = (f32)windowDims.width/(f32)windowDims.height;
+					Camera.FocalLen = 0.6f;
+					mat4x4 Proj = PerspectiveProjection(Camera.WidthOverHeight, Camera.FocalLen, 0.01f, 10000.0f);
 
-					//CameraPitch = 0.075f*Pi32;
-					//CameraOrbit += dt;
-					//CameraDolly -= 2.0f*dt;
-
-					mat4x4 CameraObject = RotateY(CameraOrbit);// RotateZ(CameraOrbit)*RotateX(CameraPitch);
-					vec3 CameraX = GetColumn(CameraObject, 0);
-					vec3 CameraY = GetColumn(CameraObject, 1);
-					vec3 CameraZ = GetColumn(CameraObject, 2);
-					vec3 CameraOt = CameraObject*(CameraP + Vec3(0, 0, CameraDolly));
+					mat4x4 CameraObject = RotateY(CameraOrbit)*RotateX(CameraPitch);// RotateZ(CameraOrbit);
+					CameraX = GetColumn(CameraObject, 0);
+					CameraY = GetColumn(CameraObject, 1);
+					CameraZ = GetColumn(CameraObject, 2);
+					vec3 CameraOt = (Camera.P + Vec3(CameraXDolly, CameraYDolly, CameraZDolly))*CameraObject;
 					mat4x4 CameraT = CameraTransform(CameraX, CameraY, CameraZ, CameraOt);
-
-					glMatrixMode(GL_PROJECTION);
-
-					Proj = Transpose(Proj * CameraT);
+					
+					Proj = Transpose(Proj*CameraT);
 					glLoadMatrixf(&Proj.E[0][0]);
 
-					//glRotatef(180, 0.0f, 1.0f, 0);
-					glTranslatef(-(terrain_width*0.5f), 0, -(terrain_height*0.5f));
-					
-					for (u32 y = 0; y < current_cell_count; y++)
+					for (u32 ChunkY = 0; ChunkY < Terrain.ChunksPerL; ChunkY++)
 					{
-						glBegin(GL_TRIANGLE_STRIP);
-						for (u32 x = 0; x < current_cell_count + 1; x++)
+						for (u32 ChunkX = 0; ChunkX < Terrain.ChunksPerW; ChunkX++)
 						{
-							vec3 p1 = terrain_verts[y][x];
-							vec3 p2 = terrain_verts[y + 1][x];
+							terrain_chunk* Chunk = &Terrain.Chunks[ChunkY * Terrain.ChunksPerW + ChunkX];
+							Assert(Chunk);
 
-							vec3 c1 = Vec3(p1.y);
-							vec3 c2 = Vec3(p2.y);
+							for (u32 y = 0; y < Chunk->cellCount; y++)
+							{
+								glBegin(GL_TRIANGLE_STRIP);
+								for (u32 x = 0; x < Chunk->cellCount + 1; x++)
+								{
+									vec3 p1 = Chunk->Verts[y * Chunk->VertCount + x];
+									vec3 p2 = Chunk->Verts[(y + 1) * Chunk->VertCount + x];
 
-							if (p1.y <= 0.0f)
-								c1 = Vec3(0, 0.2f, 1.0f);
-							if (p1.y > 0.0f && p1.y < terrain_highest_peak * 0.2f)
-								c1 = Vec3(0.2f, 1.0f, 0.2f);
-							if (p1.y > terrain_highest_peak * 0.2f && p1.y < terrain_highest_peak * 0.5f)
-								c1 = Vec3(0.2f, 0.2f, 0.2f);
+									vec3 c1 = Vec3(0.9f);
+									vec3 c2 = Vec3(0.9f);
 
-							
-							if (p2.y <= 0.0f)
-								c2 = Vec3(0, 0.2f, 1.0f);
-							if (p2.y > 0.0f && p2.y < terrain_highest_peak * 0.2f)
-								c2 = Vec3(0.2f, 1.0f, 0.2f);
-							if (p2.y > terrain_highest_peak * 0.2f && p2.y < terrain_highest_peak * 0.5f)
-								c2 = Vec3(0.2f, 0.2f, 0.2f);
+									if (p1.y <= Terrain.MinHeight)
+										c1 = Vec3(0, 0.2f, 1.0f);
+									if (p1.y > Terrain.MinHeight && p1.y < (Terrain.MinHeight - terrain_highest_peak) * 0.2f)
+										c1 = Vec3(0.2f, 1.0f, 0.2f);
+									if (p1.y >(Terrain.MinHeight - terrain_highest_peak) * 0.2f && p1.y < (terrain_highest_peak) * 0.5f)
+										c1 = Vec3(0.3f, 0.3f, 0.3f);
 
-							glVertex3fv(p1.E);
-							glColor3fv(c1.E);
+									if (p2.y <= Terrain.MinHeight)
+										c2 = Vec3(0, 0.2f, 1.0f);
+									if (p2.y > Terrain.MinHeight && p2.y < (Terrain.MinHeight - terrain_highest_peak) * 0.2f)
+										c2 = Vec3(0.2f, 1.0f, 0.2f);
+									if (p2.y >(Terrain.MinHeight - terrain_highest_peak) * 0.2f && p2.y < (terrain_highest_peak) * 0.5f)
+										c2 = Vec3(0.3f, 0.3f, 0.3f);
 
-							glVertex3fv(p2.E);
-							glColor3fv(c2.E);
+									glVertex3fv(p1.E);
+									glColor3fv(c1.E);
 
-							//glVertex3fv(p3.E);
-							//glColor3f(0, (f32)y, 1);
-
-							//glVertex3fv(p4.E);
-							//glColor3f(0, 0, 1);
-						}
-						glEnd();
+									glVertex3fv(p2.E);
+									glColor3fv(c2.E);
+								}
+								glEnd();
 #if 1
-						glLineWidth(2.0f);
+								glLineWidth(2.0f);
 
-						glBegin(GL_LINE_STRIP);
-						for (u32 x = 0; x < current_cell_count + 1; x++)
-						{
-							vec3 p1 = terrain_verts[y][x];
-							vec3 p2 = terrain_verts[y + 1][x];
+								glBegin(GL_LINE_STRIP);
+								for (u32 x = 0; x < Chunk->cellCount + 1; x++)
+								{
+									vec3 p1 = Chunk->Verts[y * Chunk->VertCount + x];
+									vec3 p2 = Chunk->Verts[(y + 1) * Chunk->VertCount + x];
 
-							vec3 c1 = Vec3(0.0f, 0.0f, 0.0f);
-							
-							//vec3 p1 = Vec3((f32)x*(terrain_width / terrain_cell_count), Sample1, (f32)y*(terrain_height / terrain_cell_count));
-							//vec3 p2 = Vec3((f32)x*(terrain_width / terrain_cell_count), Sample2, ((f32)y + 1) * (terrain_height / terrain_cell_count));
-							//vec3 p3 = Vec3((f32)x + 1, 1.0f, (f32)y + 1);
-							//vec3 p4 = Vec3((f32)x + 1, 1.0f, (f32)y);
+									vec3 c1 = Vec3(0.0f);
+									
+									if (x == 0 || y == 0)
+									{
+										c1 = Vec3(1.0f, 0.0f, 0.0f);
+									}
 
-							glVertex3fv(p1.E);
-							glColor3fv(c1.E);
+									glVertex3fv(p1.E);
+									glColor3fv(c1.E);
 
-							glVertex3fv(p2.E);
-							glColor3fv(c1.E);
-
-							//glVertex3fv(p3.E);
-							//glColor3f(0, (f32)y, 1);
-
-							//glVertex3fv(p4.E);
-							//glColor3f(0, 0, 1);
-						}
-						glEnd();
+									glVertex3fv(p2.E);
+									glColor3fv(c1.E);
+								}
+								glEnd();
 #endif
+							}
+						}
 					}
+					HDC dc = GetDC(window);
+					//glFlush();
+					SwapBuffers(dc);
+					ReleaseDC(window, dc);
 
-					timer += dt;
+					LARGE_INTEGER WorkCounter = Win32GetClock();
+					f32 WorkSecondsElapsed = (f32)Win32GetSecondsElapsed(startCounter, WorkCounter);
 
-					if (timer >= delay)
+					// TODO(casey): NOT TESTED YET!  PROBABLY BUGGY!!!!!
+					f32 SecondsElapsedForFrame = WorkSecondsElapsed;
+					if (SecondsElapsedForFrame < TargetFrameTime)
 					{
-						timer = 0.0f;
-						current_cell_count += 1;
-					}
-					
-					if (current_cell_count >= terrain_cell_count)
-						current_cell_count = terrain_cell_count;
+						if (SleepIsGranular)
+						{
+							DWORD SleepMS = (DWORD)(1000.0f * (TargetFrameTime - SecondsElapsedForFrame));
+							if (SleepMS > 0)
+							{
+								Sleep(SleepMS);
+							}
+						}
 
-					SwapBuffers(GetDC(window));
+						f32 TestSecondsElapsedForFrame = (f32)Win32GetSecondsElapsed(startCounter, Win32GetClock());
+						if (TestSecondsElapsedForFrame < TargetFrameTime)
+						{
+							// TODO(casey): LOG MISSED SLEEP HERE
+						}
+
+						while (SecondsElapsedForFrame < TargetFrameTime)
+						{
+							SecondsElapsedForFrame = (f32)Win32GetSecondsElapsed(startCounter, Win32GetClock());
+						}
+					}
+					else
+					{
+						// TODO(casey): MISSED FRAME RATE!
+						// TODO(casey): Logging
+					}
+
+					game_input *Temp = NewInput;
+					NewInput = OldInput;
+					OldInput = Temp;
+
+					LARGE_INTEGER endCounter = Win32GetClock();
+					f64 MSPerFrame = 1000.0f * Win32GetSecondsElapsed(startCounter, endCounter);
+
+					DWORD endCycles = (DWORD)__rdtsc();
+
+					u64 cyclesElapsed = (endCycles - startCycles);
+
+					f64 FPS = 0.0;
+					f64 MCPF = (f64)cyclesElapsed / (1000.0f * 1000.0f);
+
+					startCycles = endCycles;
+					startCounter = endCounter;
+
+					i8 buffer[256];
+					sprintf(buffer, "%.02fms, %.02ff/s, %.02fmc/f\n", MSPerFrame, FPS, MCPF);
+					OutputDebugString(buffer);
 				}
 
 				VirtualFree(memory.persistentStorage, 0, MEM_RELEASE);

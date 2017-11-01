@@ -83,6 +83,9 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalOptions>-wd 4996 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
+    <Link>
+      <SubSystem>NotSet</SubSystem>
+    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>

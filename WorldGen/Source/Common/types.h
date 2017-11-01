@@ -1,6 +1,9 @@
 #ifndef TYPES_H
 #define TYPES_H
 
+#define global_variable static
+#define internal_func static
+
 typedef char				i8;
 typedef short				i16;
 typedef int					i32;
@@ -31,5 +34,7 @@ typedef size_t				mem_size;
 #define ArrayCount(Array) (sizeof(Array)/sizeof(Array[0]))
 #define Maximum(a, b) (a > b ? a : b)
 #define Minimum(a, b) (a < b ? a : b)
+
+#define Assert(Exp) if(Exp == 0) { *(int*)0 = 0; }
 
 #endif

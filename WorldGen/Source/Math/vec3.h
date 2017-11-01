@@ -203,6 +203,14 @@ operator*(mat4x4 A, vec3 P)
 	return R;
 }
 
+inline vec3
+operator*(vec3 P, mat4x4 A)
+{
+	vec3 R = Transform(A, P, 1.0f);
+
+	return R;
+}
+
 mat4x4
 Identity(void)
 {
@@ -220,8 +228,8 @@ Identity(void)
 mat4x4
 RotateX(f32 Angle)
 {
-	f32 c = cos(Angle);
-	f32 s = sin(Angle);
+	f32 c = cosf(Angle);
+	f32 s = sinf(Angle);
 
 	mat4x4 R =
 	{
@@ -237,8 +245,8 @@ RotateX(f32 Angle)
 mat4x4
 RotateY(f32 Angle)
 {
-	f32 c = cos(Angle);
-	f32 s = sin(Angle);
+	f32 c = cosf(Angle);
+	f32 s = sinf(Angle);
 
 	mat4x4 R =
 	{
@@ -254,8 +262,8 @@ RotateY(f32 Angle)
 mat4x4
 RotateZ(f32 Angle)
 {
-	f32 c = cos(Angle);
-	f32 s = sin(Angle);
+	f32 c = cosf(Angle);
+	f32 s = sinf(Angle);
 
 	mat4x4 R =
 	{
@@ -285,14 +293,14 @@ Transpose(mat4x4 A)
 }
 
 mat4x4
-PerspectiveProjection(f32 AspectWidthOverHeight, f32 FocalLength)
+PerspectiveProjection(f32 AspectWidthOverHeight, f32 FocalLength, f32 NearZ, f32 FarZ)
 {
 	f32 a = 1.0f;
 	f32 b = AspectWidthOverHeight;
 	f32 c = FocalLength;
 
-	f32 n = 0.1f; // NOTE: Near Clip plane _distance_
-	f32 f = 100.0f; // NOTE: Far Clip plane _distance_
+	f32 n = NearZ; // NOTE: Near Clip plane _distance_
+	f32 f = FarZ; // NOTE: Far Clip plane _distance_
 
 #if 1
 					// NOTE: These are the perspective correct terms, for when you divide by -z
