@@ -122,6 +122,8 @@
     <ClInclude Include="Source\Math\stb_perlin.h" />
     <ClInclude Include="Source\Math\vec2.h" />
     <ClInclude Include="Source\Math\vec3.h" />
+    <ClInclude Include="Source\Math\vec4.h" />
+    <ClInclude Include="Source\OpenGL\openGL.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

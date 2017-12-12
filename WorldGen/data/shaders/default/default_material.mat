@@ -1,0 +1,6 @@
+#Material File
+version 1.0
+
+#shaders
+default.vs
+default.fs

@@ -111,6 +111,16 @@ vec3 Normalize(vec3 A)
 	return Result;
 }
 
+vec3 Cross(vec3 A, vec3 B)
+{
+	vec3 C = {0};
+	C.x = (A.y * B.z) - (A.z * B.y);
+	C.y = (A.z * B.x) - (A.x * B.z);
+	C.z = (A.x * B.y) - (A.y * B.x);
+
+	return C;
+}
+
 vec3 Clamp01(vec3 val)
 {
 	vec3 result;
@@ -402,6 +412,28 @@ CameraTransform(vec3 X, vec3 Y, vec3 Z, vec3 P)
 	R = Translate(R, -(R*P));
 
 	return R;
+}
+
+mat4x4
+LookAt(vec3 eye, vec3 target, vec3 up)
+{
+	vec3 zAxis = Normalize(eye - target);
+	vec3 xAxis = Normalize(Cross(up, zAxis));
+	vec3 yAxis = Normalize(Cross(zAxis, xAxis));
+
+	f32 eyeX = -Dot(xAxis, eye);
+	f32 eyeY = -Dot(yAxis, eye);
+	f32 eyeZ = -Dot(zAxis, eye);
+
+	mat4x4 viewMatrix = 
+	{
+		xAxis.x,	yAxis.x,	zAxis.x,	0.0f,
+		xAxis.y,	yAxis.y,	zAxis.y,	0.0f,
+		xAxis.z,	yAxis.z,	zAxis.z,	0.0f,
+		eyeX,		eyeY,		eyeZ,		1.0f,
+	};
+
+	return viewMatrix;
 }
 
 #endif
