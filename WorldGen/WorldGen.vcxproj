@@ -115,6 +115,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Source\main.cpp" />
+    <ClCompile Include="Source\Platform\platformWin32.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Common\types.h" />
@@ -124,6 +125,7 @@
     <ClInclude Include="Source\Math\vec3.h" />
     <ClInclude Include="Source\Math\vec4.h" />
     <ClInclude Include="Source\OpenGL\openGL.h" />
+    <ClInclude Include="Source\Platform\platformWin32.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

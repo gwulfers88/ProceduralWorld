@@ -2,6 +2,7 @@
 #define STB_PERLIN_IMPLEMENTATION 1
 
 #include <Windows.h>
+#include "Platform/platformWin32.h"
 #include "Math/vec4.h"
 #include "Math/stb_perlin.h"
 #include "OpenGL/openGL.h"
@@ -121,102 +122,6 @@ int Win32OpenGLAttribs[] =
 	WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
 	0,
 };
-
-struct win32_memory
-{
-	mem_size persistentStorageSize;
-	mem_size transientStorageSize;
-	mem_size totalStorageSize;
-	void* persistentStorage;
-	void* transientStorage;
-};
-
-struct win32_dimension
-{
-	u32 width;
-	u32 height;
-};
-
-struct read_file_result
-{
-	i32 Size;
-	void *Data;
-};
-
-#define DEBUG_PLATFORM_READ_ENTIRE_FILE(name) read_file_result name(i8* Filename)
-typedef DEBUG_PLATFORM_READ_ENTIRE_FILE(debug_platform_read_entire_file);
-#define DEBUG_PLATFORM_WRITE_ENTIRE_FILE(name) b32 name(i8* filename, read_file_result fileResult)
-typedef DEBUG_PLATFORM_WRITE_ENTIRE_FILE(debug_platform_write_entire_file);
-
-#define PLATFORM_FREE_MEMORY(name) void name(void* data)
-typedef PLATFORM_FREE_MEMORY(platform_free_memory);
-#define PLATFORM_ALLOC_MEMORY(name) void* name(i32 size)
-typedef PLATFORM_ALLOC_MEMORY(platform_alloc_memory);
-
-//These should get their own header file
-PLATFORM_FREE_MEMORY(FreeMemory)
-{
-	if (data)
-	{
-		VirtualFree(data, 0, MEM_RELEASE);
-		data = 0;
-	}
-}
-
-PLATFORM_ALLOC_MEMORY(AllocMemory)
-{
-	return VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-}
-
-DEBUG_PLATFORM_READ_ENTIRE_FILE(DebugPlatformReadEntireFile)
-{
-	read_file_result result = {};
-
-	HANDLE filehandle = CreateFile(Filename, GENERIC_READ, 0, 0, OPEN_EXISTING, 0, 0);
-
-	if (filehandle != INVALID_HANDLE_VALUE)
-	{
-		LARGE_INTEGER filesize;
-
-		if (GetFileSizeEx(filehandle, &filesize))
-		{
-			u32 size = filesize.QuadPart;
-			result.Data = AllocMemory(size);
-
-			if (result.Data)
-			{
-				DWORD bytesRead = 0;
-
-				if (ReadFile(filehandle, result.Data, size, &bytesRead, 0) && size == bytesRead)
-				{
-					result.Size = bytesRead;
-				}
-			}
-		}
-
-		CloseHandle(filehandle);
-	}
-
-	return result;
-}
-
-DEBUG_PLATFORM_WRITE_ENTIRE_FILE(DebugPlatformWriteEntireFile)
-{
-	HANDLE filehandle = CreateFile(filename, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
-
-	if (filehandle != INVALID_HANDLE_VALUE)
-	{
-		DWORD bytesWritten = 0;
-		WriteFile(filehandle, fileResult.Data, fileResult.Size, &bytesWritten, 0);
-		CloseHandle(filehandle);
-	}
-	else
-	{
-		// LOGGING
-		return false;
-	}
-	return true;
-}
 
 GLuint OpenGLCreateProgram(char *HeaderCode, char *VertexCode, char *FragmentCode)
 {
@@ -513,10 +418,10 @@ OpenGLInit(opengl_info Info)
 
 	OpenGL.TerrainOffsetID = glGetUniformLocation(OpenGL.TerrainShaderProgram, "terrain_offset");
 
-	FreeMemory(TerrainVertShader.Data);
-	FreeMemory(TerrainTessCtrlShader.Data);
-	FreeMemory(TerrainTessEvalShader.Data);
-	FreeMemory(TerrainFragShader.Data);
+	PlatformFreeMemory(TerrainVertShader.Data);
+	PlatformFreeMemory(TerrainTessCtrlShader.Data);
+	PlatformFreeMemory(TerrainTessEvalShader.Data);
+	PlatformFreeMemory(TerrainFragShader.Data);
 }
 
 void Win32ToggleFullscreen(HWND Window)
@@ -1366,7 +1271,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdSho
 
 				glUniform1i(OpenGL.TerrainTexMapID[0], 1);
 
-				FreeMemory(terrainTex[0].Pixels);
+				PlatformFreeMemory(terrainTex[0].Pixels);
 
 				// ---------------
 
@@ -1382,7 +1287,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdSho
 
 				glUniform1i(OpenGL.TerrainTexMapID[1], 1);
 
-				FreeMemory(terrainTex[1].Pixels);
+				PlatformFreeMemory(terrainTex[1].Pixels);
 
 				// -----------------------
 
@@ -1398,7 +1303,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdSho
 
 				glUniform1i(OpenGL.TerrainTexMapID[2], 1);
 
-				FreeMemory(terrainTex[2].Pixels);
+				PlatformFreeMemory(terrainTex[2].Pixels);
 
 				// ---------------------------------
 
@@ -1414,7 +1319,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR cmdLn, int cmdSho
 
 				glUniform1i(OpenGL.TerrainTexMapID[3], 1);
 
-				FreeMemory(terrainTex[3].Pixels);
+				PlatformFreeMemory(terrainTex[3].Pixels);
 
 				glEnable(GL_CULL_FACE);
 

@@ -19,10 +19,16 @@
     <Filter Include="Source Files\Math">
       <UniqueIdentifier>{24c615f7-4903-474a-96de-37a31941b29d}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Platform">
+      <UniqueIdentifier>{41bc0d23-613a-492b-b937-f8e54f7fff3c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source\main.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Platform\platformWin32.cpp">
+      <Filter>Source Files\Platform</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -46,6 +52,9 @@
     </ClInclude>
     <ClInclude Include="Source\Math\vec4.h">
       <Filter>Source Files\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Platform\platformWin32.h">
+      <Filter>Source Files\Platform</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
